@@ -1,0 +1,20 @@
+
+# 제일 먼저 실행할 것
+# ./.venv/Scripts/python.exe -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
+# AI 모델 로드 및 변환
+transformers >= 4.40.0
+Pillow
+
+# 데이터 분석 및 학습 유틸리티
+numpy
+scikit-learn
+
+# 시각화 및 진행률 표시
+matplotlib
+seaborn
+tqdm
+
+# ./.venv/Scripts/python.exe -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+
+

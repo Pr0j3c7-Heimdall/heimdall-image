@@ -1,0 +1,10 @@
+numpy
+scikit-learn
+matplotlib
+seaborn
+tqdm
+Pillow
+diffusers
+joblib
+transformers
+accelerate

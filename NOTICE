@@ -1,0 +1,45 @@
+Heimdall Image (heimdall-image)
+Copyright 2026 Team Veritas
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+All source code in this repository (feature extraction, training, and
+inference scripts under binary/ and multiple/) was written by Team Veritas.
+
+--------------------------------------------------------------------------------
+Third-party models and weights loaded at runtime
+--------------------------------------------------------------------------------
+
+The scripts in this repository download pretrained weights from the Hugging
+Face Hub at run time. These weights are NOT redistributed as part of this
+repository and remain subject to their own upstream licenses:
+
+* DINOv3 (facebook/dinov3-*, Meta AI/FAIR)
+  Loaded via `transformers.AutoModel` as a frozen feature extractor.
+  Governed by the DINOv3 License (Meta's own custom license, not an
+  OSI-approved license). See:
+  https://ai.meta.com/resources/models-and-libraries/dinov3-license/
+  Reference: Siméoni et al., "DINOv3," arXiv:2508.10104, 2025.
+
+* Stable Diffusion v1.5 U-Net (runwayml/stable-diffusion-v1-5)
+  Loaded via `diffusers.StableDiffusionPipeline.from_pretrained` and used
+  solely as a frozen feature extractor for AI-generated image detection —
+  this project does not use it to generate images. Governed by the
+  CreativeML OpenRAIL-M License.
+  Methodology reference: Xu et al., "Detecting Image Attribution for
+  Text-to-Image Diffusion Models in RGB and Beyond," arXiv:2403.19653, 2024.
+
+* ConvNeXt V2 (timm, ImageNet-pretrained backbone used inside F3Net)
+  Licensed under the Apache License, Version 2.0.
+
+--------------------------------------------------------------------------------
+Methodology references (no vendored code)
+--------------------------------------------------------------------------------
+
+* F3Net — frequency-domain forgery cue design inspired by:
+  Qian et al., "Thinking in Frequency: Face Forgery Detection by Mining
+  Frequency-Aware Clues," ECCV 2020.
+  The dual-stream ConvNeXt V2 architecture in this repository is an
+  original implementation by Team Veritas.
+
+Full training/dataset methodology is described in the accompanying paper,
+"운용 환경을 고려한 Text-to-Image 생성 이미지 판별 프레임워크."

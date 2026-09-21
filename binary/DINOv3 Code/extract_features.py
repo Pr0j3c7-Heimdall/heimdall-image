@@ -88,6 +88,7 @@ def main():
 
     all_features = []
     all_labels = []
+    all_paths = []
 
     with torch.no_grad():
         for i in tqdm(range(0, len(image_paths), args.batch_size), desc=f"Extracting ({args.crop})"):
@@ -96,6 +97,7 @@ def main():
 
             batch_imgs = []
             valid_labels = []
+            valid_paths = []
 
             for path, label in zip(batch_paths, batch_labels):
                 try:
@@ -103,6 +105,7 @@ def main():
                     img = transform(img)
                     batch_imgs.append(img)
                     valid_labels.append(label)
+                    valid_paths.append(path)
                 except Exception as e:
                     print(f"Skipping error image: {path} ({e})\n")
 
@@ -126,13 +129,14 @@ def main():
 
             all_features.append(features.cpu())
             all_labels.extend(valid_labels)
+            all_paths.extend(valid_paths)
 
     if len(all_features) > 0:
         X = torch.cat(all_features, dim=0)
         y = torch.tensor(all_labels)
 
         os.makedirs(os.path.dirname(args.output), exist_ok=True)
-        torch.save({'X': X, 'y': y, 'classes': classes}, args.output)
+        torch.save({'X': X, 'y': y, 'classes': classes, 'paths': all_paths}, args.output)
         print(f"Saved features to: {args.output}")
         print(f"Shape: X={X.shape}, y={y.shape}")
     else:

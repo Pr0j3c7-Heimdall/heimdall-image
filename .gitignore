@@ -11,3 +11,6 @@ env/
 .DS_Store
 
 *.log
+
+# fusion 비교용 샘플별 점수 CSV (재생성 가능, 용량 큼)
+fusion/scores/

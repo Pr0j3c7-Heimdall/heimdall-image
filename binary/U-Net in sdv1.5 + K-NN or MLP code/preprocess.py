@@ -23,9 +23,9 @@ class ImageDataset(Dataset):
         try:
             img = Image.open(path).convert('RGB')
             img_tensor = self.transform(img)
-            return img_tensor, label, folder, True
+            return img_tensor, label, folder, True, path
         except Exception:
-            return torch.zeros((3, 512, 512)), label, folder, False
+            return torch.zeros((3, 512, 512)), label, folder, False, path
 
 def process_dataset(data_dir, output_name, batch_size=8, num_workers=4, device='cuda'):
     extractor = FeatureExtractor(device=device)
@@ -67,9 +67,9 @@ def process_dataset(data_dir, output_name, batch_size=8, num_workers=4, device='
     dataset = ImageDataset(image_paths, labels_list, folders_list)
     loader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, shuffle=False)
     
-    all_features, all_labels, all_folders = [], [], []
+    all_features, all_labels, all_folders, all_paths = [], [], [], []
     
-    for batch_imgs, batch_labels, batch_folders, batch_valid in tqdm(loader):
+    for batch_imgs, batch_labels, batch_folders, batch_valid, batch_paths in tqdm(loader):
         valid_idx = batch_valid.bool()
         if not valid_idx.any(): continue
             
@@ -81,13 +81,14 @@ def process_dataset(data_dir, output_name, batch_size=8, num_workers=4, device='
         
         valid_folders = [f for i, f in enumerate(batch_folders) if valid_idx[i]]
         all_folders.extend(valid_folders)
+        all_paths.extend(p for i, p in enumerate(batch_paths) if valid_idx[i])
             
     # [핵심] 텐서 결합 및 .pt 딕셔너리로 저장
     X = torch.cat(all_features, dim=0)
     y = torch.tensor(all_labels, dtype=torch.long)
     
     save_path = f"{output_name}.pt"
-    torch.save({'X': X, 'y': y, 'folders': all_folders}, save_path)
+    torch.save({'X': X, 'y': y, 'folders': all_folders, 'paths': all_paths}, save_path)
     print(f"Saved: {save_path} (Features shape: {X.shape})")
 
 if __name__ == "__main__":

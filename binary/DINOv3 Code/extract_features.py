@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 import torchvision.transforms as T
+from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from tqdm import tqdm
 from transformers import AutoModel
@@ -12,8 +13,18 @@ parser.add_argument('--data_dir', type=str, required=True, help='Dataset directo
 parser.add_argument('--output', type=str, required=True, help='Output .pt file path')
 parser.add_argument('--res', type=int, default=224, help='Input resolution')
 parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--num_workers', type=int, default=8, help='이미지 로딩·전처리 워커 수 (0이면 메인 프로세스에서 순차 처리)')
 parser.add_argument('--crop', type=str, default='center', choices=['center', 'random', '5crop'])
 args = parser.parse_args()
+
+class StackNormalizedCrops:
+    """FiveCrop 결과(PIL 5장)를 정규화해 (5, C, H, W)로 쌓는다. lambda 대신 클래스로 둬서 DataLoader 워커(spawn)에서도 pickle 가능"""
+    def __init__(self, norm):
+        self.norm = norm
+
+    def __call__(self, crops):
+        return torch.stack([self.norm(T.ToTensor()(crop)) for crop in crops])
+
 
 def get_transform(crop_type, res):
     norm = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -35,8 +46,34 @@ def get_transform(crop_type, res):
         return T.Compose([
             T.Resize(256, interpolation=3),
             T.FiveCrop(res),
-            T.Lambda(lambda crops: torch.stack([norm(T.ToTensor()(crop)) for crop in crops]))
+            StackNormalizedCrops(norm)
         ])
+
+class ImageListDataset(Dataset):
+    """읽기에 실패한 이미지는 None을 돌려주고 collate에서 제외한다(기존 '건너뛰기' 동작 유지)."""
+    def __init__(self, paths, labels, transform):
+        self.paths, self.labels, self.transform = paths, labels, transform
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        try:
+            img = self.transform(Image.open(path).convert('RGB'))
+        except Exception as e:
+            print(f"Skipping error image: {path} ({e})\n")
+            return None
+        return img, self.labels[idx], path
+
+
+def collate_skip_none(batch):
+    batch = [b for b in batch if b is not None]
+    if not batch:
+        return None
+    imgs, labels, paths = zip(*batch)
+    return torch.stack(imgs), list(labels), list(paths)
+
 
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -90,31 +127,21 @@ def main():
     all_labels = []
     all_paths = []
 
+    loader = DataLoader(
+        ImageListDataset(image_paths, labels, transform),
+        batch_size=args.batch_size, shuffle=False,  # 순서 유지 필수 (paths/labels와 특징이 대응)
+        num_workers=args.num_workers, collate_fn=collate_skip_none,
+    )
+
     with torch.no_grad():
-        for i in tqdm(range(0, len(image_paths), args.batch_size), desc=f"Extracting ({args.crop})"):
-            batch_paths = image_paths[i : i + args.batch_size]
-            batch_labels = labels[i : i + args.batch_size]
-
-            batch_imgs = []
-            valid_labels = []
-            valid_paths = []
-
-            for path, label in zip(batch_paths, batch_labels):
-                try:
-                    img = Image.open(path).convert('RGB')
-                    img = transform(img)
-                    batch_imgs.append(img)
-                    valid_labels.append(label)
-                    valid_paths.append(path)
-                except Exception as e:
-                    print(f"Skipping error image: {path} ({e})\n")
-
-            if not batch_imgs:
+        for batch in tqdm(loader, desc=f"Extracting ({args.crop})"):
+            if batch is None:
                 continue
+            input_batch, valid_labels, valid_paths = batch
 
             # [수정] 모델 출력 처리 (Hugging Face 방식)
             if args.crop == '5crop':
-                input_tensor = torch.stack(batch_imgs).to(device)
+                input_tensor = input_batch.to(device)
                 b, n, c, h, w = input_tensor.shape
                 
                 outputs = model(input_tensor.view(-1, c, h, w))
@@ -122,7 +149,7 @@ def main():
                 
                 features = features.view(b, n, -1)
             else:
-                input_tensor = torch.stack(batch_imgs).to(device)
+                input_tensor = input_batch.to(device)
                 
                 outputs = model(input_tensor)
                 features = outputs.last_hidden_state[:, 0]  # CLS token

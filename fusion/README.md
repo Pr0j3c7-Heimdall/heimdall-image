@@ -25,6 +25,8 @@
 
 **1. 특징 재추출 (DINOv3, U-Net)** — 이번에 `extract_features.py`와 `preprocess.py`가 `paths`를 함께 저장하도록 수정됐습니다. 기존 Test 특징 파일에는 `paths`가 없어서 Test 세트만 다시 추출해야 합니다(학습 특징·체크포인트는 그대로 사용 가능). F3Net은 `.pt` 파일 경로 자체가 키가 되므로 재전처리가 필요 없습니다.
 
+`extract_features.py`는 `--num_workers`(기본 8)로 이미지 로딩을 병렬화합니다. 워커가 없으면 메인 프로세스가 이미지를 한 장씩 디코딩해서 GPU가 대부분 놀게 됩니다. 출력 경로(`--output`)는 실행한 디렉토리 기준 상대경로이니, `binary/DINOv3 Code`에서 실행하지 않았다면 `score_test.py`의 `--input`에 실제 저장 위치를 주세요.
+
 **2. 모델별 점수 저장**
 
 ```bash
@@ -60,7 +62,7 @@ python fit_fusion.py --track image \
 
 ## 조인 키
 
-세 모델의 경로 표기가 달라서(원본 `D:/.../test/00_BDD/a.jpg`, F3Net `feature/test/00_BDD/a.pt`) `test/` 이후의 확장자 없는 상대경로(`00_BDD/a`)를 키로 씁니다. 라벨은 폴더명 앞 숫자(0~9 Real, 10~ AI)로 정합니다(기존 `test.py`와 같은 규칙). 세 모델이 서로 다른 이미지를 채점했으면 `fit_fusion.py`가 공통 샘플 수와 함께 경고를 출력합니다.
+세 모델의 경로 표기가 달라서(원본 `D:/.../test/00_BDD/a.jpg`, F3Net `feature/test/00_BDD/a.pt`) `test/` 이후의 확장자 없는 상대경로(`00_BDD/a`)를 키로 씁니다. Test 폴더가 평면 18개(`00_BDD` … `19_SDXL`)이든 그룹 폴더가 있는 2단 구조(`00_Real/…`, `01_AI-T2I/…`)이든 같은 키가 나오도록 그룹 폴더는 키에서 뺍니다. 라벨은 그룹 폴더가 있으면 그것으로(`00_Real`=0, `01_AI-T2I`=1), 없으면 폴더명 앞 숫자(0~9 Real, 10~ AI)로 정합니다. 2단 구조에서는 AI 폴더도 `00_BigGAN`~`09_SDXL`로 번호가 Real과 겹치므로 숫자 규칙만 쓰면 AI가 Real로 잘못 라벨링됩니다. 각 `score_test.py`가 끝에 `real=…, AI=…` 개수를 출력하니 각각 5만 개인지 확인하세요. 세 모델이 서로 다른 이미지를 채점했으면 `fit_fusion.py`가 공통 샘플 수와 함께 경고를 출력합니다.
 
 ## 알아둘 점
 

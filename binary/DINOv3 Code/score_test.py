@@ -29,20 +29,34 @@ CONFIG = {
 }
 
 
-def sample_key(path):
-    """모델마다 다른 경로 표기(원본 이미지 / F3Net의 .pt)를 'test/' 이후의 확장자 없는 상대경로로
-    통일해 조인 키로 쓴다. 예) D:/Heimdall_Image_Dataset/test/00_BDD/a.jpg -> 00_BDD/a"""
+_GROUP_DIRS = {'00_Real': 0, '01_AI-T2I': 1}
+
+
+def _rel_parts(path):
+    """경로에서 마지막 'test' 폴더 이후의 구성요소. 예) D:/.../test/00_BDD/a.jpg -> ['00_BDD', 'a.jpg']"""
     parts = path.replace('\\', '/').split('/')
     if 'test' not in parts:
         raise ValueError("경로에 'test' 폴더가 없어 조인 키를 만들 수 없습니다: {}".format(path))
-    idx = len(parts) - 1 - parts[::-1].index('test')
-    rel = '/'.join(parts[idx + 1:])
-    return os.path.splitext(rel)[0]
+    return parts[len(parts) - parts[::-1].index('test'):]
 
 
-def label_from_key(key):
-    """폴더명 앞 숫자 기준 (0~9: Real, 10~: AI) — test.py와 동일한 규칙"""
-    return 0 if int(key.split('/')[0].split('_')[0]) < 10 else 1
+def sample_key(path):
+    """모델마다 다른 경로 표기(원본 이미지 / F3Net의 .pt)와 폴더 구조(그룹 폴더 00_Real/01_AI-T2I 유무)를
+    통일해 조인 키로 쓴다: 'test/' 이후 상대경로에서 확장자를 떼고, 맨 앞 그룹 폴더가 있으면 제거한다.
+    예) D:/.../test/00_BDD/a.jpg, D:/.../test/00_Real/00_BDD/a.jpg, feature/test/00_BDD/a.pt -> 00_BDD/a"""
+    rel = _rel_parts(path)
+    if rel[0] in _GROUP_DIRS and len(rel) > 2:  # 그룹 폴더 바로 아래에 파일만 있는 구조는 그룹 폴더를 유지(키 충돌 방지)
+        rel = rel[1:]
+    return os.path.splitext('/'.join(rel))[0]
+
+
+def sample_label(path):
+    """그룹 폴더(00_Real=0, 01_AI-T2I=1)가 있으면 그것으로, 없으면 폴더명 앞 숫자(0~9 Real, 10~ AI)로 정한다.
+    Train 구조는 AI 폴더도 00~09로 번호가 겹치므로 그룹 폴더가 있을 때 숫자 규칙을 쓰면 안 된다."""
+    first = _rel_parts(path)[0]
+    if first in _GROUP_DIRS:
+        return _GROUP_DIRS[first]
+    return 0 if int(first.split('_')[0]) < 10 else 1
 
 
 def main():
@@ -76,14 +90,14 @@ def main():
                 outputs = model(inputs)
             raw_scores.extend((outputs[:, 1] - outputs[:, 0]).cpu().tolist())
 
+    labels = [sample_label(p) for p in paths]
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['path', 'label', 'raw_score'])
-        for path, score in zip(paths, raw_scores):
-            key = sample_key(path)
-            writer.writerow([key, label_from_key(key), score])
-    print('Saved {} rows -> {}'.format(len(paths), args.out))
+        for path, label, score in zip(paths, labels, raw_scores):
+            writer.writerow([sample_key(path), label, score])
+    print('Saved {} rows (real={}, AI={}) -> {}'.format(len(paths), labels.count(0), labels.count(1), args.out))
 
 
 if __name__ == '__main__':

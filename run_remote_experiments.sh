@@ -80,12 +80,13 @@ echo "=============================================================="
 if [ -f "fusion/scores/multi_f3net.csv" ]; then
   echo "  이미 완료 (fusion/scores/multi_f3net.csv 존재) — 건너뜀"
 else
-  if [ -d "multiple/F3Net Code/feature/test" ]; then
-    echo "  전처리본 있음 — 건너뜀"
-  elif [ -d "binary/F3Net Code/feature/test" ]; then
+  if [ -d "binary/F3Net Code/feature/test" ] && [ ! -d "multiple/F3Net Code/feature/test" ]; then
     echo "  binary 쪽 전처리본을 재사용합니다 (전처리 계산이 이진·다중 동일)"
   else
-    echo "  전처리 시작 (AI 이미지 5만 장, 수십 분 소요될 수 있음)"
+    # preprocessing.py는 이미 처리된 파일을 건너뛰므로(process_image의 이어하기 로직),
+    # 폴더 존재만으로 "다 됐다"고 판단하지 않고 매번 호출한다 — 중단 후 재실행 시
+    # 남은 파일만 마저 처리된다. 다 되어 있으면 빠르게 끝난다.
+    echo "  전처리 확인/진행 중 (AI 이미지 5만 장, 중단된 적 있으면 이어서 진행)"
     run_test_only_preprocess "multiple/F3Net Code" "--data_root \"$DATA_ROOT\""
   fi
   ( cd "multiple/F3Net Code"
@@ -136,12 +137,9 @@ echo "=============================================================="
 if [ -f "fusion/scores/image_f3net.csv" ]; then
   echo "  이미 완료 — 건너뜀"
 else
-  if [ -d "binary/F3Net Code/feature/test" ]; then
-    echo "  전처리본 있음 — 건너뜀"
-  else
-    echo "  전처리 시작 (실제+AI 10만 장, 수십 분 소요될 수 있음)"
-    run_test_only_preprocess "binary/F3Net Code" ""
-  fi
+  # A와 같은 이유로 폴더 존재만으로 건너뛰지 않고 매번 호출한다.
+  echo "  전처리 확인/진행 중 (실제+AI 10만 장, 중단된 적 있으면 이어서 진행)"
+  run_test_only_preprocess "binary/F3Net Code" ""
   ( cd "binary/F3Net Code"
     $PY score_test.py --dataset_root ./feature --weights_path best_model.pth \
         --out ../../fusion/scores/image_f3net.csv

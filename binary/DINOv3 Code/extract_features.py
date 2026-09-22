@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import torch
 import torchvision.transforms as T
@@ -86,9 +87,15 @@ def main():
     try:
         model = AutoModel.from_pretrained(model_name).to(device)
     except Exception as e:
-        print(f"Error loading model: {e}")
-        print("Please install transformers: pip install transformers")
-        return
+        # [수정] 원래는 여기서 조용히 return해서 exit code가 0이 됐다. 그러면
+        # run_remote_experiments.sh의 `set -e`가 이 실패를 못 잡고 다음 단계로
+        # 넘어가, 출력 파일이 없다는 훨씬 헷갈리는 오류로 뒤늦게 실패했다.
+        # sys.exit(1)로 바꿔서 여기서 바로, 명확하게 멈추게 한다.
+        print(f"Error loading model: {e}", file=sys.stderr)
+        print("gated repo 오류면: https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m 에서 접근 승인 후"
+              " HF_TOKEN 환경변수를 설정하세요. 그 외 오류면 pip install -U transformers 를 확인하세요.",
+              file=sys.stderr)
+        sys.exit(1)
 
     model.eval()
 

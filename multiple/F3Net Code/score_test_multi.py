@@ -62,6 +62,9 @@ def main():
     labels = [x[2] for x in parsed]
     keys = [x[3] for x in parsed]
     print(f"AI 이미지 {len(ds.image_paths)}장")
+    if len(ds.image_paths) < 49000:
+        print(f"[경고] AI 이미지가 {len(ds.image_paths)}장뿐입니다(정상은 50,000장). "
+              "전처리가 덜 끝난 채로 실행됐을 수 있습니다 — 결과를 논문에 쓰기 전에 원인을 확인하세요.")
     if not ds.image_paths:
         raise SystemExit("AI .pt를 찾지 못했습니다. --dataset_root 아래 test/ 구조를 확인하세요.")
 

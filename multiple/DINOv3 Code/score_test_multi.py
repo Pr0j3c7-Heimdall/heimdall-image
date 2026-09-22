@@ -68,6 +68,9 @@ def main():
             keep.append(i); labels.append(idx); keys.append(key)
     X = X[keep]
     print(f"AI 이미지 {len(keep)}장 선택 (전체 {len(paths)}장 중)")
+    if len(keep) < 49000:
+        print(f"[경고] AI 이미지가 {len(keep)}장뿐입니다(정상은 50,000장). "
+              "전처리가 덜 끝난 채로 실행됐을 수 있습니다 — 결과를 논문에 쓰기 전에 원인을 확인하세요.")
 
     if X.dim() == 3 and args.crop == 'center':
         X = X[:, 4, :]   # torchvision FiveCrop 순서: tl, tr, bl, br, center

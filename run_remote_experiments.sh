@@ -19,13 +19,29 @@ set -e   # 각 단계 실패 시 즉시 중단 (원인 파악 전 뒷 단계로 
 
 # ------------------------------- 설정 (원격 PC에 맞게 수정) -------------------------------
 DATA_ROOT="D:/Heimdall_Image_Dataset"     # train/, test/ 가 들어있는 최상위 폴더
-PY="./.venv/Scripts/python.exe"           # 각 하위 폴더의 가상환경 python (run_all.sh와 동일)
 # -----------------------------------------------------------------------------------------
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 echo "작업 루트: $ROOT"
 echo "데이터 루트: $DATA_ROOT"
+echo
+
+# ---- 가상환경 python 절대경로로 고정 ----
+# 예전에는 하위 폴더마다 "./.venv/Scripts/python.exe" 상대경로로 찾았는데,
+# 그러면 cd해서 들어가는 모든 폴더(binary/DINOv3, ..., fusion 등)에 .venv
+# junction을 빠짐없이 만들어야 했다. 저장소 루트에 venv 하나(.venv_shared
+# 또는 .venv)만 있으면 되도록 절대경로로 바꿔, 어떤 폴더에서 실행하든
+# junction 없이 동작한다.
+if [ -f "$ROOT/.venv_shared/Scripts/python.exe" ]; then
+  PY="$ROOT/.venv_shared/Scripts/python.exe"
+elif [ -f "$ROOT/.venv/Scripts/python.exe" ]; then
+  PY="$ROOT/.venv/Scripts/python.exe"
+else
+  echo "가상환경을 찾을 수 없습니다: $ROOT/.venv_shared 또는 $ROOT/.venv 에 python.exe가 있어야 합니다."
+  exit 1
+fi
+echo "가상환경: $PY"
 echo
 
 # ---- 0. 사전 점검: 이번에 새로 추가한 스크립트들이 다 있는지 ----
@@ -69,7 +85,7 @@ run_test_only_preprocess() {
     cp preprocessing.py preprocessing.py.orig
     sed -i "s/for mode in \['train', 'test'\]:/for mode in ['test']:/" preprocessing.py
     trap 'mv preprocessing.py.orig preprocessing.py' EXIT
-    eval "$PY preprocessing.py $extra_args"
+    eval "\"$PY\" preprocessing.py $extra_args"
   )
 }
 
@@ -92,7 +108,7 @@ else
   ( cd "multiple/F3Net Code"
     SRC="./feature"
     [ -d "$SRC/test" ] || SRC="../../binary/F3Net Code/feature"
-    $PY score_test_multi.py --dataset_root "$SRC" --weights_path best_model.pth \
+    "$PY" score_test_multi.py --dataset_root "$SRC" --weights_path best_model.pth \
         --out ../../fusion/scores/multi_f3net.csv | tee f3net_multiclass_result.txt
   )
 fi
@@ -107,7 +123,7 @@ if [ -f "$DINO_FEAT" ]; then
   echo "  특징 이미 추출됨 — 건너뜀"
 else
   ( cd "binary/DINOv3 Code"
-    $PY extract_features.py --data_dir "$DATA_ROOT/test" --output ./features/test_paths.pt \
+    "$PY" extract_features.py --data_dir "$DATA_ROOT/test" --output ./features/test_paths.pt \
         --crop 5crop --num_workers 8
   )
 fi
@@ -115,7 +131,7 @@ if [ -f "fusion/scores/image_dinov3.csv" ]; then
   echo "  B-1 이진 점수 이미 있음 — 건너뜀"
 else
   ( cd "binary/DINOv3 Code"
-    $PY score_test.py --model heimdall_dinov3_mlp.pth --input ./features/test_paths.pt \
+    "$PY" score_test.py --model heimdall_dinov3_mlp.pth --input ./features/test_paths.pt \
         --crop 5crop --out ../../fusion/scores/image_dinov3.csv
   )
 fi
@@ -123,7 +139,7 @@ if [ -f "fusion/scores/multi_dinov3.csv" ]; then
   echo "  C-1 다중 점수 이미 있음 — 건너뜀"
 else
   ( cd "multiple/DINOv3 Code"
-    $PY score_test_multi.py --model dinov3_multiclass.pth \
+    "$PY" score_test_multi.py --model dinov3_multiclass.pth \
         --input "../../binary/DINOv3 Code/features/test_paths.pt" \
         --out ../../fusion/scores/multi_dinov3.csv
   )
@@ -141,7 +157,7 @@ else
   echo "  전처리 확인/진행 중 (실제+AI 10만 장, 중단된 적 있으면 이어서 진행)"
   run_test_only_preprocess "binary/F3Net Code" ""
   ( cd "binary/F3Net Code"
-    $PY score_test.py --dataset_root ./feature --weights_path best_model.pth \
+    "$PY" score_test.py --dataset_root ./feature --weights_path best_model.pth \
         --out ../../fusion/scores/image_f3net.csv
   )
 fi
@@ -156,14 +172,14 @@ if [ -f "$UNET_FEAT" ]; then
   echo "  특징 이미 추출됨 — 건너뜀"
 else
   ( cd "binary/U-Net in sdv1.5 + K-NN or MLP code"
-    $PY preprocess.py --data_dir "$DATA_ROOT/test" --output test_paths
+    "$PY" preprocess.py --data_dir "$DATA_ROOT/test" --output test_paths
   )
 fi
 if [ -f "fusion/scores/image_unet.csv" ]; then
   echo "  B-3 이진 점수 이미 있음 — 건너뜀"
 else
   ( cd "binary/U-Net in sdv1.5 + K-NN or MLP code"
-    $PY score_test.py --input test_paths.pt --model unet_mlp_model.pth --model_type mlp \
+    "$PY" score_test.py --input test_paths.pt --model unet_mlp_model.pth --model_type mlp \
         --out ../../fusion/scores/image_unet.csv
   )
 fi
@@ -171,7 +187,7 @@ if [ -f "fusion/scores/multi_unet.csv" ]; then
   echo "  C-2 다중 점수 이미 있음 — 건너뜀"
 else
   ( cd "multiple/U-Net in sdv1.5 + K-NN or MLP code"
-    $PY score_test_multi.py --model unet_mlp_model_multi.pth \
+    "$PY" score_test_multi.py --model unet_mlp_model_multi.pth \
         --input "../../binary/U-Net in sdv1.5 + K-NN or MLP code/test_paths.pt" \
         --out ../../fusion/scores/multi_unet.csv
   )
@@ -183,7 +199,7 @@ echo "=============================================================="
 echo " B-5. 이진 앙상블 5-fold 비교"
 echo "=============================================================="
 ( cd fusion
-  $PY fit_fusion.py --track image \
+  "$PY" fit_fusion.py --track image \
       --scores scores/image_dinov3.csv scores/image_f3net.csv scores/image_unet.csv \
       --names DINOv3 F3Net U-Net --n_folds 5 | tee image_fusion_kfold.txt
 )
@@ -194,7 +210,7 @@ echo "=============================================================="
 echo " C-3. 다중 분류 앙상블 비교"
 echo "=============================================================="
 ( cd fusion
-  $PY fuse_multiclass.py \
+  "$PY" fuse_multiclass.py \
       --scores scores/multi_dinov3.csv scores/multi_f3net.csv scores/multi_unet.csv \
       --names DINOv3 F3Net U-Net --out multi_fusion.json | tee multi_fusion_result.txt
 )
